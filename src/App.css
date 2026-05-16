@@ -24,35 +24,9 @@ body {
   flex-wrap: wrap;
 }
 
-.timezone-info {
-  min-width: 280px;
-  padding: 18px 22px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
-}
-
-.timezone-info h3 {
-  margin-top: 0;
-}
-
-.timezone-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 8px 0;
-  font-size: 15px;
-}
-
-.timezone-item small {
-  opacity: 0.7;
-}
-
 .money,
-.weather-info {
+.weather-info,
+.advice-info {
   min-width: 280px;
   padding: 18px 22px;
   border-radius: 18px;
@@ -63,12 +37,72 @@ body {
   color: #ffffff;
 }
 
-.weather-icon {
-  width: 50px;
-  vertical-align: middle;
-  margin-left: 10px;
+/* Специфичные стили для блока цитаты (внутренняя раскладка) */
+.advice-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  animation: fadeIn 0.5s ease-in;
 }
 
+.advice-emoji {
+  font-size: 2.5rem;
+  background: rgba(255, 255, 255, 0.2);
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.advice-content {
+  flex: 1;
+}
+
+.advice-text {
+  font-size: 1rem;
+  font-style: italic;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.advice-author {
+  text-align: right;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+/* Анимация появления */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+  .advice-info {
+    flex-direction: column;
+    text-align: center;
+    padding: 15px;
+  }
+  .advice-text {
+    font-size: 0.95rem;
+  }
+  .advice-author {
+    text-align: center;
+  }
+}
+
+/* Заголовок списка задач */
 .list-header {
   font-size: 42px;
   margin: 20px 0 25px;
@@ -78,6 +112,7 @@ body {
   color: white;
 }
 
+/* Форма добавления задачи */
 form {
   display: flex;
   justify-content: center;
@@ -112,6 +147,7 @@ button:hover {
   box-shadow: 0 10px 25px rgba(6, 182, 212, 0.35);
 }
 
+/* Карточка задачи */
 .item-todo {
   max-width: 560px;
   margin: 14px auto;
@@ -156,18 +192,7 @@ p {
   font-size: 18px;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
+/* Дополнительная адаптивность для маленьких экранов */
 @media (max-width: 600px) {
   .list-header {
     font-size: 30px;

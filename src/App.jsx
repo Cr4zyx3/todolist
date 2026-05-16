@@ -6,18 +6,10 @@ import axios from 'axios';
 
 const TASKS_STORAGE_KEY = 'tasks-list-project-web';
 
-const timeZoneList = [
-  { name: 'Калининград', zone: 'Europe/Kaliningrad' },
-  { name: 'Москва', zone: 'Europe/Moscow' },
-  { name: 'Екатеринбург', zone: 'Asia/Yekaterinburg' },
-  { name: 'Красноярск', zone: 'Asia/Krasnoyarsk' },
-  { name: 'Владивосток', zone: 'Asia/Vladivostok' }
-];
-
 function App() {
   const [rates, setRates] = useState({});
   const [weatherData, setWeatherData] = useState(null);
-  const [timeZones, setTimeZones] = useState([]);
+  const [advice, setAdvice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [todos, setTodos] = useState(() => {
     const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
@@ -28,104 +20,92 @@ function App() {
     async function fetchAllData() {
       setLoading(true);
 
+      // 1. Курс валют (ЦБ РФ)
       try {
         const currencyResponse = await axios.get(
           'https://www.cbr-xml-daily.ru/daily_json.js'
         );
-
-        const USDrate = currencyResponse.data.Valute.USD.Value
-          .toFixed(4)
-          .replace('.', ',');
-
-        const EURrate = currencyResponse.data.Valute.EUR.Value
-          .toFixed(4)
-          .replace('.', ',');
-
+        const USDrate = currencyResponse.data.Valute.USD.Value.toFixed(4).replace('.', ',');
+        const EURrate = currencyResponse.data.Valute.EUR.Value.toFixed(4).replace('.', ',');
         setRates({ USDrate, EURrate });
+        console.log('✅ Курс валют загружен');
       } catch (currencyError) {
-        console.error('Ошибка загрузки валюты:', currencyError);
+        console.error('❌ Ошибка загрузки валюты:', currencyError);
       }
 
+      // 2. Цитата дня на русском (Forismatic API + JSONP)
       try {
-        const timeResponses = await Promise.allSettled(
-          timeZoneList.map((item) =>
-            axios.get(
-              `https://timeapi.io/api/time/current/zone?timeZone=${item.zone}`
-            )
-          )
-        );
-
-        const formattedTimes = timeResponses
-          .map((result, index) => {
-            if (result.status !== 'fulfilled') {
-              return null;
-            }
-
-            const data = result.value.data;
-
-            const date = new Date(
-              data.year,
-              data.month - 1,
-              data.day,
-              data.hour,
-              data.minute,
-              data.seconds
-            );
-
-            return {
-              city: timeZoneList[index].name,
-              zone: timeZoneList[index].zone,
-              date
-            };
-          })
-          .filter(Boolean);
-
-        setTimeZones(formattedTimes);
-      } catch (timeError) {
-        console.error('Ошибка загрузки времени:', timeError);
+        const callbackName = `jsonp_callback_${Date.now()}`;
+        window[callbackName] = (data) => {
+          if (data && data.quoteText) {
+            setAdvice({
+              text: data.quoteText,
+              author: data.quoteAuthor || 'Неизвестный автор',
+              emoji: '💡'
+            });
+          } else {
+            throw new Error('Не удалось загрузить цитату');
+          }
+          delete window[callbackName];
+        };
+        const script = document.createElement('script');
+        script.src = `https://api.forismatic.com/api/1.0/?method=getQuote&format=jsonp&lang=ru&jsonp=${callbackName}`;
+        document.body.appendChild(script);
+        console.log('✅ Цитата дня загружена');
+      } catch (adviceError) {
+        console.error('❌ Ошибка загрузки цитаты:', adviceError);
+        setAdvice({
+          text: 'Делайте короткие перерывы каждые 90 минут, чтобы сохранять фокус.',
+          author: 'Совет дня',
+          emoji: '💡'
+        });
       }
 
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
+      // 3. Погода: температура + вероятность дождя + ветер
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              const lat = position.coords.latitude;
+              const lon = position.coords.longitude;
+              // Запрашиваем current_weather (температура, ветер) и почасовую вероятность дождя
+              const weatherResponse = await axios.get(
+                `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=precipitation_probability`
+              );
 
-            const weatherResponse = await axios.get(
-              `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
-            );
+              // Вероятность дождя для текущего часа (берём первый час)
+              let precipitationProbability = 0;
+              if (weatherResponse.data.hourly && weatherResponse.data.hourly.precipitation_probability.length > 0) {
+                precipitationProbability = weatherResponse.data.hourly.precipitation_probability[0];
+              }
 
-            setWeatherData(weatherResponse.data.current_weather);
-          } catch (weatherError) {
-            console.error('Ошибка загрузки погоды:', weatherError);
+              setWeatherData({
+                temperature: weatherResponse.data.current_weather.temperature,
+                precipitation: precipitationProbability,
+                windspeed: weatherResponse.data.current_weather.windspeed,
+              });
+              console.log('✅ Погода загружена');
+            } catch (weatherError) {
+              console.error('❌ Ошибка загрузки погоды:', weatherError);
+            } finally {
+              setLoading(false);
+            }
+          },
+          (geoError) => {
+            console.error('❌ Геолокация недоступна:', geoError);
+            setLoading(false);
           }
-        },
-        (geoError) => {
-          console.error('Геолокация недоступна:', geoError);
-        }
-      );
-
-      setLoading(false);
+        );
+      } else {
+        console.error('❌ Браузер не поддерживает геолокацию');
+        setLoading(false);
+      }
     }
 
     fetchAllData();
   }, []);
 
-  useEffect(() => {
-    if (timeZones.length === 0) return;
-
-    const timer = setInterval(() => {
-      setTimeZones((prevTimes) =>
-        prevTimes.map((item) => ({
-          ...item,
-          date: new Date(item.date.getTime() + 1000)
-        }))
-      );
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeZones.length]);
-
+  // Сохранение задач в localStorage
   useEffect(() => {
     localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(todos));
   }, [todos]);
@@ -137,7 +117,6 @@ function App() {
         task: userInput,
         complete: false
       };
-
       setTodos([...todos, newItem]);
     }
   };
@@ -156,48 +135,38 @@ function App() {
 
   return (
     <div className="App">
-      {loading && <p>Загрузка...</p>}
+      {loading && <p>⏳ Загрузка данных...</p>}
 
       <div className="info">
         <div className="money">
-          <div>Доллар США $ — {rates.USDrate || 'нет данных'} руб.</div>
-          <div>Евро € — {rates.EURrate || 'нет данных'} руб.</div>
+          <div>💵 Доллар США $ — {rates.USDrate || 'нет данных'} руб.</div>
+          <div>💶 Евро € — {rates.EURrate || 'нет данных'} руб.</div>
         </div>
 
         {weatherData && (
           <div className="weather-info">
             <div>
-              Погода сегодня: <br />
-              🌡️ {weatherData.temperature}°C&nbsp;
-              💨 {weatherData.windspeed} км/ч&nbsp;
-              🧭 {weatherData.winddirection}°
+              🌤️ Погода сегодня: <br />
+              🌡️ {weatherData.temperature}°C &nbsp;
+              ☔ {weatherData.precipitation}% дождь &nbsp;
+              💨 {weatherData.windspeed} км/ч &nbsp;
             </div>
           </div>
         )}
 
-        {timeZones.length > 0 && (
-          <div className="timezone-info">
-            <h3>Часовые пояса России</h3>
-
-            {timeZones.map((item) => (
-              <div key={item.city} className="timezone-item">
-                <span>{item.city}</span>
-                <strong>
-                  {item.date.toLocaleTimeString('ru-RU', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                  })}
-                </strong>
-                <small>{item.zone}</small>
-              </div>
-            ))}
+        {advice && (
+          <div className="advice-info">
+            <div className="advice-emoji">{advice.emoji}</div>
+            <div className="advice-content">
+              <div className="advice-text">"{advice.text}"</div>
+              <div className="advice-author">{advice.author}</div>
+            </div>
           </div>
         )}
       </div>
 
       <header>
-        <h1 className="list-header">Список задач: {todos.length}</h1>
+        <h1 className="list-header">📋 Список задач: {todos.length}</h1>
       </header>
 
       <ToDoForm addTask={addTask} />
